@@ -61,7 +61,7 @@ class CategoricalUnivariateAnalysis(UnivariateAnalysisStrategy):
                 x=feature,
                 data=df,
                 hue=feature,
-                palette="pastel",
+                palette="coolwarm",
                 order=order,
                 legend=False,
                 ax=ax

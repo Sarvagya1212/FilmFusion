@@ -3,9 +3,9 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 
-# ----------------------------------------------------
+
 # Abstract Base Class for Bivariate Analysis Strategy
-# ----------------------------------------------------
+
 class BivariateAnalysisStrategy(ABC):
     @abstractmethod
     def analyze(self, df: pd.DataFrame, feature1: str, feature2: str, ax=None, **kwargs):
