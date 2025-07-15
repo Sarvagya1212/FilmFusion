@@ -8,7 +8,7 @@ import seaborn as sns
 
 class BivariateAnalysisStrategy(ABC):
     @abstractmethod
-    def analyze(self, df: pd.DataFrame, feature1: str, feature2: str, ax=None, **kwargs):
+    def analyze(self, df: pd.DataFrame, feature1: str, feature2: str, tilte: str, ax=None, **kwargs):
         pass
 
 
@@ -16,7 +16,7 @@ class BivariateAnalysisStrategy(ABC):
 # Numerical vs Numerical Strategy (Scatter Plot)
 # ----------------------------------------------------
 class NumericalVsNumericalAnalysis(BivariateAnalysisStrategy):
-    def analyze(self, df: pd.DataFrame, feature1: str, feature2: str, ax=None, **kwargs):
+    def analyze(self, df: pd.DataFrame, feature1: str, feature2: str, title: str, ax=None, **kwargs):
         sns.set_style("whitegrid")
         created_fig = False
         if ax is None:
@@ -24,7 +24,7 @@ class NumericalVsNumericalAnalysis(BivariateAnalysisStrategy):
             created_fig = True
 
         sns.scatterplot(x=feature1, y=feature2, data=df, ax=ax, **kwargs)
-        ax.set_title(f"{feature1} vs {feature2}")
+        ax.set_title(title, fontsize=18)
         ax.set_xlabel(feature1)
         ax.set_ylabel(feature2)
 
@@ -37,7 +37,7 @@ class NumericalVsNumericalAnalysis(BivariateAnalysisStrategy):
 # Categorical vs Numerical Strategy (Box & Line Plot)
 # ----------------------------------------------------
 class CategoricalVsNumericalAnalysis(BivariateAnalysisStrategy):
-    def analyze(self, df: pd.DataFrame, feature1: str, feature2: str, ax=None, **kwargs):
+    def analyze(self, df: pd.DataFrame, feature1: str, feature2: str, title: str, ax=None, **kwargs):
         sns.set_style("whitegrid")
         created_fig = False
         if ax is None:
@@ -50,16 +50,17 @@ class CategoricalVsNumericalAnalysis(BivariateAnalysisStrategy):
         hue = kwargs.pop("hue", None)
 
         if plot_type == "box":
-            sns.boxplot(x=feature1, y=feature2, hue=hue, data=df, ax=ax, order=order, **kwargs, )
+            sns.boxplot(x=feature1, y=feature2, hue=hue, data=df, ax=ax, order=order, **kwargs)
         elif plot_type == "line":
             sns.lineplot(x=feature1, y=feature2, hue=hue, data=df, ax=ax, **kwargs)
         elif plot_type == "bar":
             sns.barplot(x=feature1, y=feature2, hue=hue, data=df, ax=ax, order=order, **kwargs)
-
+        elif plot_type == "lineplot":
+            sns.lineplot(x=feature1, y=feature2, data=df, ax=ax, hue=hue, **kwargs)
         else:
             raise ValueError("Invalid plot_type. Use 'box' or 'line'.")
 
-        ax.set_title(f"{feature1} vs {feature2}", fontsize=14)
+        ax.set_title(title , fontsize=18)
         ax.set_xlabel(feature1, fontsize=12)
         ax.set_ylabel(feature2, fontsize=12)
         ax.tick_params(axis='x', rotation=45)
@@ -67,7 +68,6 @@ class CategoricalVsNumericalAnalysis(BivariateAnalysisStrategy):
         if created_fig:
             plt.tight_layout()
             plt.show()
-
 
 # ----------------------------------------------------
 # Context Class for Strategy Management

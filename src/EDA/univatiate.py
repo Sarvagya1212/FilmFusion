@@ -7,13 +7,13 @@ import seaborn as sns
 # Abstract Base Class for Univariate Analysis
 class UnivariateAnalysisStrategy(ABC):
     @abstractmethod
-    def analyze(self, df: pd.DataFrame, feature: str, save=False, filename=None):
+    def analyze(self, df: pd.DataFrame, feature: str, title: str, save=False, filename=None):
         pass
 
 
 # Concrete Strategy for Numerical Features
 class NumericalUnivariateAnalysis(UnivariateAnalysisStrategy):
-    def analyze(self, df: pd.DataFrame, feature: str, save=False, filename=None, ax=None):
+    def analyze(self, df: pd.DataFrame, feature: str,  title: str, save=False, filename=None, ax=None):
         print(f"\nDescriptive Statistics for Numerical Feature: {feature}")
         print(df[feature].describe())
 
@@ -23,7 +23,7 @@ class NumericalUnivariateAnalysis(UnivariateAnalysisStrategy):
             created_fig = True
 
         sns.histplot(df[feature].dropna(), kde=True, bins=50, ax=ax)
-        ax.set_title(f"Distribution of {feature}")
+        ax.set_title(title, fontsize=18)
         ax.set_xlabel(feature)
         ax.set_ylabel("Frequency")
 
@@ -37,7 +37,7 @@ class NumericalUnivariateAnalysis(UnivariateAnalysisStrategy):
 
 # Concrete Strategy for Categorical Features
 class CategoricalUnivariateAnalysis(UnivariateAnalysisStrategy):
-    def analyze(self, df: pd.DataFrame, feature: str, hue=None, save=False, filename=None, ax=None):
+    def analyze(self, df: pd.DataFrame, feature: str, title: str, hue=None, save=False, filename=None, ax=None):
         sns.set_style("whitegrid")
         created_fig = False
         if ax is None:
@@ -67,7 +67,7 @@ class CategoricalUnivariateAnalysis(UnivariateAnalysisStrategy):
                 ax=ax
             )
 
-        ax.set_title(f"Frequency of {feature}")
+        ax.set_title(title, fontsize=18)
         ax.set_xlabel(feature)
         ax.set_ylabel("Count")
         ax.tick_params(axis='x', rotation=45)
