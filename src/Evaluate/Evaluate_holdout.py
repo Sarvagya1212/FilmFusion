@@ -1,0 +1,79 @@
+import numpy as np
+import logging
+
+def precision_at_k(recommended, relevant, k):
+    recommended_k = recommended[:k]
+    relevant_set = set(relevant)
+    return len([r for r in recommended_k if r in relevant_set]) / k
+
+def recall_at_k(recommended, relevant, k):
+    recommended_k = recommended[:k]
+    relevant_set = set(relevant)
+    return len([r for r in recommended_k if r in relevant_set]) / len(relevant_set) if relevant_set else 0
+
+def evaluate_holdout(model, ratings_df, k=10, users_to_evaluate=100, strategy='user', rating_threshold=4.0):
+    logger = logging.getLogger(__name__)
+    logging.basicConfig(level=logging.INFO)
+
+    user_ids = model.user_item_matrix.index.tolist()
+    np.random.seed(42)
+    sampled_users = np.random.choice(user_ids, size=min(users_to_evaluate, len(user_ids)), replace=False)
+
+    precision_list, recall_list = []
+
+    for user_id in sampled_users:
+        try:
+            user_ratings = model.user_item_matrix.loc[user_id]
+            relevant_items = user_ratings[user_ratings >= rating_threshold].index.tolist()
+
+            if not relevant_items:
+                logger.debug(f"Skipping user {user_id}: no relevant items.")
+                continue
+
+            # Get recommendations using selected strategy
+            if strategy == 'user':
+                recommendations = model.recommend_user_based(user_id, top_n=k)
+            elif strategy == 'item':
+                recommendations = model.recommend_item_based(user_id, top_n=k)
+            elif strategy == 'hybrid':
+                recommendations = model.recommend_hybrid(user_id, top_n=k)
+            else:
+                raise ValueError(f"Unknown strategy: {strategy}")
+
+            if 'tmdbId' in recommendations.columns:
+                recommended_items = recommendations['tmdbId'].astype(int).tolist()
+            else:
+                logger.warning(f"User {user_id}: No 'tmdbId' column in recommendations.")
+                continue
+
+            relevant_items = [int(i) for i in relevant_items]
+
+            if not recommended_items:
+                logger.debug(f"Skipping user {user_id}: no recommendations.")
+                continue
+
+            # Debug overlap
+            overlap = set(recommended_items) & set(relevant_items)
+            print(f"\nUser: {user_id}")
+            print(f"Recommended: {recommended_items}")
+            print(f"Relevant:    {relevant_items}")
+            print(f"Overlap:     {overlap}")
+
+            precision = precision_at_k(recommended_items, relevant_items, k)
+            recall = recall_at_k(recommended_items, relevant_items, k)
+
+            precision_list.append(precision)
+            recall_list.append(recall)
+
+        except Exception as e:
+            logger.warning(f"Error evaluating user {user_id}: {str(e)}")
+            continue
+
+    avg_precision = np.mean(precision_list) if precision_list else 0
+    avg_recall = np.mean(recall_list) if recall_list else 0
+
+    return {
+        "Precision@K": round(avg_precision, 4),
+        "Recall@K": round(avg_recall, 4),
+        "Users Evaluated": len(precision_list)
+    }
