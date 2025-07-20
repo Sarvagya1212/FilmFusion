@@ -1,0 +1,39 @@
+
+----- Evaluation @ 2025-07-20 12:26:27 -----
+Model Name: RecommenderSystem
+Top@K: 10
+Features Used: TF-IDF, Metadata
+strategy: user
+users: 50
+Precision@K: 0.5460
+Recall@K: 0.1194
+NDCG@K: 0.5331
+Users Evaluated: 50
+Model: user
+-------------------------------------
+
+----- Evaluation @ 2025-07-20 12:26:29 -----
+Model Name: RecommenderSystem
+Top@K: 10
+Features Used: TF-IDF, Metadata
+strategy: item
+users: 50
+Precision@K: 0.0080
+Recall@K: 0.0053
+NDCG@K: 0.0055
+Users Evaluated: 50
+Model: item
+-------------------------------------
+
+----- Evaluation @ 2025-07-20 12:26:50 -----
+Model Name: RecommenderSystem
+Top@K: 10
+Features Used: TF-IDF, Metadata
+strategy: hybrid
+users: 50
+Precision@K: 0.4720
+Recall@K: 0.0982
+NDCG@K: 0.4616
+Users Evaluated: 50
+Model: hybrid
+-------------------------------------

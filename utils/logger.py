@@ -1,63 +1,61 @@
 import os
+import logging
 from datetime import datetime
 
-def log_evaluation_results(metrics, 
-                           model_name=None, 
-                           top_k=None, 
-                           features_used=None,
-                           extra_params=None, 
-                           log_dir="logs", 
-                           filename="evaluation_log.txt"):
+# --- Configuration ---
+# Define the log directory and file path once as constants
+LOG_DIR = "logs"
+LOG_FILE = os.path.join(LOG_DIR, "evaluation_log.txt")
+
+def setup_logger():
     """
-    Appends evaluation metrics and model details to a log file with a timestamp.
-
-    Args:
-        metrics (dict): Dictionary containing evaluation metrics like Precision@K, Recall@K, NDCG@K, etc.
-        model_name (str): Name or type of the model used.
-        top_k (int): Value of K used in top-K recommendation.
-        features_used (str or list): Features used for recommendation (e.g., "TF-IDF + Metadata").
-        extra_params (dict): Any additional configuration (e.g., test_ratio, similarity metric, etc.)
-        log_dir (str): Folder to save the log file.
-        filename (str): Name of the log file.
+    Configures a global logger to append to the evaluation log file.
+    This setup function ensures all subsequent log calls write to the same file.
     """
+    # Ensure the 'logs' directory exists
+    os.makedirs(LOG_DIR, exist_ok=True)
 
-    os.makedirs(log_dir, exist_ok=True)
-    log_path = os.path.join(log_dir, filename)
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    # Use Python's built-in logging module
+    # 'a' mode ensures that we always append to the file
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(message)s',  # We'll format the message ourselves before logging
+        handlers=[
+            logging.FileHandler(LOG_FILE, mode='a', encoding='utf-8'),
+            logging.StreamHandler()  # This also prints the log to your console
+        ]
+    )
 
-    log_entry = f"\n----- Evaluation @ {timestamp} -----\n"
+# This function should be called by your evaluation script
+def log_evaluation_results(metrics, model_name, top_k, features_used, extra_params):
+    """
+    Formats and logs evaluation results using the configured logger.
+    """
+    logger = logging.getLogger(__name__)
+    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-    if model_name:
-        log_entry += f"Model: {model_name}\n"
-    if top_k:
-        log_entry += f"Top@K: {top_k}\n"
-    if features_used:
-        if isinstance(features_used, list):
-            features_used = ", ".join(features_used)
-        log_entry += f"Features Used: {features_used}\n"
+    # Create the log message as a list of strings for clarity
+    log_entry = [
+        f"\n----- Evaluation @ {timestamp} -----",
+        f"Model Name: {model_name}",
+        f"Top@K: {top_k}",
+        f"Features Used: {', '.join(features_used) if isinstance(features_used, list) else features_used}",
+    ]
+
+    # Add all extra parameters (like strategy, alpha, etc.)
     if extra_params:
-        for key, val in extra_params.items():
-            log_entry += f"{key}: {val}\n"
+        log_entry.extend(f"{key}: {value}" for key, value in extra_params.items())
 
-    for key, value in metrics.items():
-        log_entry += f"{key}: {value:.4f}\n" if isinstance(value, float) else f"{key}: {value}\n"
+    # Add all performance metrics
+    if metrics:
+        log_entry.extend(f"{key}: {value:.4f}" if isinstance(value, float) else f"{key}: {value}" for key, value in metrics.items())
 
-    log_entry += "-------------------------------------\n"
+    log_entry.append("-------------------------------------")
 
-    with open(log_path, "a") as f:
-        f.write(log_entry)
+    # Join the list into a single string and log it
+    logger.info("\n".join(log_entry))
+    # The print statement is no longer needed as the StreamHandler will output to console
+    # print(f"Evaluation results logged to: {LOG_FILE}")
 
-    print(f"Evaluation results logged to: {log_path}")
-    
-    
-'''if __name__ == "__main__":
-
-
-    log_evaluation_results(
-        metrics=metrics,
-        model_name=type(recommender).__name__,
-        top_k=10,
-        features_used=["TF-IDF", "Overview", "Tagline", "Genres", "Cast"],
-        extra_params={"test_ratio": 0.2, "similarity": "cosine"}
-    )'''
-
+# Set up the logger as soon as this module is imported
+setup_logger()
