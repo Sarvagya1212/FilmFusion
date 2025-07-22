@@ -220,10 +220,10 @@ def format_genres(genres_str):
 def load_default_system():
     """Load the recommender system with default/production data"""
     try:
-        # In production, these would be your actual data files
-        default_ratings = r"C:\Users\sarva\MoviePulse\data\processed\ratings_cleans.csv"  # Your production ratings
-        default_metadata = r"C:\Users\sarva\MoviePulse\data\processed\movies_with_sentiment.csv"  # Your movie catalog
-        
+        default_ratings = os.path.join("data", "processed", "ratings_cleans.csv")
+        default_metadata = os.path.join("data", "processed", "movies_with_sentiment.csv")
+
+
         if os.path.exists(default_ratings) and os.path.exists(default_metadata):
             with st.spinner('Loading movie database...'):
                 recommender = RecommenderSystem(
@@ -236,7 +236,7 @@ def load_default_system():
                 st.session_state.data_loaded = True
                 return True
         else:
-            st.error("Movie database not found. Please contact administrator.")
+            st.error("Movie database not found. Please contact administrator!.")
             return False
     except Exception as e:
         st.error(f"Error loading movie database: {str(e)}")
@@ -492,7 +492,7 @@ def display_admin_interface():
             if st.button("🔄 Reload Production Data"):
                 if load_default_system():
                     st.success("Production data reloaded successfully!")
-                    st.rerun()
+                    st.experimental_rerun()
         else:
             st.write("Upload custom dataset for testing:")
             ratings_file = st.file_uploader("Ratings CSV", type=['csv'])
@@ -502,7 +502,7 @@ def display_admin_interface():
                 if st.button("📤 Load Custom Dataset"):
                     if load_custom_system(ratings_file, metadata_file):
                         st.success("Custom dataset loaded successfully!")
-                        st.rerun()
+                        st.experimental_rerun()
     
     with tab3:
         st.subheader("Algorithm Testing")
@@ -597,7 +597,7 @@ def main():
             st.warning("🔄 Loading movie database...")
             if st.button("🚀 Initialize System"):
                 load_default_system()
-                st.rerun()
+                st.experimental_rerun()
         else:
             st.success("✅ System Ready")
     

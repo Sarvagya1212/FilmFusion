@@ -1,4 +1,5 @@
-streamlit==1.25.0
+streamlit>=1.20.0
+plotly==5.15.0
 pandas==2.0.3
 scikit-learn==1.3.0
 scikit-surprise @ https://github.com/NicolasHug/Surprise/archive/refs/heads/master.zip

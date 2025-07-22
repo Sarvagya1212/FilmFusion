@@ -1,4 +1,5 @@
 
+
 services:
   api:
     build:
@@ -16,5 +17,6 @@ services:
     ports:
       - "8501:8501"
     volumes:
-      - .:/app
-    
+      - .:/app     
+    working_dir: /app  
+    command: ["streamlit", "run", "dashboard/app1.py", "--server.port=8501", "--server.address=0.0.0.0"]
