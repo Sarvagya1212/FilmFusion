@@ -1,13 +1,23 @@
 import streamlit as st
 import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+import numpy as np
+from io import StringIO
+import time
 import os
 import sys
-import copy
 
-# =============================================================================
-# 1. SETUP: PAGE CONFIGURATION AND PATHS
-# =============================================================================
-st.set_page_config(page_title="MoviePulse", layout="wide")
+# Import your RecommenderSystem class
+# from recommender_system import RecommenderSystem
+
+st.set_page_config(
+    page_title="Movie Recommender System",
+    page_icon="🎬",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
 try:
     current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -18,223 +28,317 @@ except ImportError as e:
     st.error(f"FATAL ERROR: Could not import project files: {e}")
     st.stop()
 
-# =============================================================================
-# 2. MODEL LOADING & DATA PREPARATION
-# =============================================================================
-@st.cache_resource
-def load_main_recommender():
-    """Loads the main, global recommender system."""
-    loading_message = st.empty()
-    loading_message.info("Initializing Recommender System... (This is a one-time setup and may take a minute.)")
-    
-    metadata_file = os.path.join(project_root, "data", "processed", "movies_metadata_enriched.csv")
-    if not os.path.exists(metadata_file):
-        st.error(f"FATAL ERROR: The required metadata file was not found at '{metadata_file}'.")
-        st.error("Please run 'analysis/run_advanced_sentiment.py' to generate it.")
-        st.stop()
+# Custom CSS for better styling
+st.markdown("""
+<style>
+    .main-header {
+        font-size: 3rem;
+        color: #FF6B6B;
+        text-align: center;
+        margin-bottom: 2rem;
+        text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+    }
+    .metric-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 1rem;
+        border-radius: 10px;
+        color: white;
+        margin: 0.5rem 0;
+    }
+    .recommendation-card {
+        border: 1px solid #e0e0e0;
+        border-radius: 10px;
+        padding: 1rem;
+        margin: 0.5rem 0;
+        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    .stSelectbox > div > div > select {
+        background-color: #f0f2f6;
+    }
+</style>
+""", unsafe_allow_html=True)
 
-    content_cols = ['overview', 'tagline', 'genres', 'cast', 'crew', 'keywords', 'reviews']
-    recommender = RecommenderSystem(
-        ratings_path=os.path.join(project_root, "data", "processed", "ratings_cleans.csv"),
-        metadata_path=metadata_file,
-        content_cols=content_cols,
-        verbose=False 
-    )
-    recommender.run_all()
- 
-    
-    
-    movie_titles = sorted(recommender.metadata_df['title'].dropna().unique())
-    loading_message.success("✅ Recommender System is ready!")
-    return recommender, movie_titles
+# Initialize session state
+if 'recommender' not in st.session_state:
+    st.session_state.recommender = None
+if 'data_loaded' not in st.session_state:
+    st.session_state.data_loaded = False
+if 'recommendations' not in st.session_state:
+    st.session_state.recommendations = None
 
-try:
-    recommender, movie_titles = load_main_recommender()
-except Exception as e:
-    st.error("Failed to initialize the Recommender System.")
-    st.exception(e)
-    st.stop()
+def load_recommender_system():
+    """Initialize and load the recommender system"""
+    try:
+        # Initialize the recommender system
+        # You'll need to provide the actual file paths
+        ratings_path = st.session_state.get('ratings_file', 'ratings.csv')
+        metadata_path = st.session_state.get('metadata_file', 'movies_metadata.csv')
+        
+        if ratings_path and metadata_path:
+            with st.spinner('Initializing recommender system...'):
+                recommender = RecommenderSystem(
+                    ratings_path=ratings_path,
+                    metadata_path=metadata_path,
+                    verbose=True
+                )
+                recommender.run_all()
+                st.session_state.recommender = recommender
+                st.session_state.data_loaded = True
+                st.success("✅ Recommender system loaded successfully!")
+                return True
+    except Exception as e:
+        st.error(f"Error loading recommender system: {str(e)}")
+        return False
+    return False
 
-# =============================================================================
-# 3. HELPER FUNCTION FOR DISPLAYING MOVIE DETAILS
-# =============================================================================
-def display_movie_details(row, score_type='Predicted Score'):
-    """A helper function to neatly display movie details."""
-    BASE_IMAGE_URL = "https://image.tmdb.org/t/p/w200"
-    poster_path = row.get('poster_path')
-    poster_url = f"{BASE_IMAGE_URL}{poster_path}" if pd.notna(poster_path) else "https://placehold.co/200x300/000000/FFFFFF?text=No+Poster"
+def display_recommendations(recommendations_df, strategy):
+    """Display recommendations in an attractive format"""
+    if recommendations_df.empty:
+        st.warning("No recommendations found!")
+        return
     
-    col1, col2 = st.columns([1, 4])
+    st.subheader(f"🎯 Top Recommendations ({strategy.title()})")
+    
+    # Display metrics
+    col1, col2, col3 = st.columns(3)
     with col1:
-        st.image(poster_url, width=150)
+        st.markdown(f'<div class="metric-card"><h3>{len(recommendations_df)}</h3><p>Movies Found</p></div>', 
+                   unsafe_allow_html=True)
     with col2:
-        st.markdown(f"#### {row['title']}")
-        if 'tagline' in row and pd.notna(row['tagline']) and row['tagline']:
-            st.markdown(f"*{row['tagline']}*")
+        if 'predicted_rating' in recommendations_df.columns:
+            avg_score = recommendations_df['predicted_rating'].mean()
+            st.markdown(f'<div class="metric-card"><h3>{avg_score:.2f}</h3><p>Avg Predicted Rating</p></div>', 
+                       unsafe_allow_html=True)
+        elif 'similarity' in recommendations_df.columns:
+            avg_sim = recommendations_df['similarity'].mean()
+            st.markdown(f'<div class="metric-card"><h3>{avg_sim:.3f}</h3><p>Avg Similarity</p></div>', 
+                       unsafe_allow_html=True)
+        elif 'hybrid_score' in recommendations_df.columns:
+            avg_score = recommendations_df['hybrid_score'].mean()
+            st.markdown(f'<div class="metric-card"><h3>{avg_score:.3f}</h3><p>Avg Hybrid Score</p></div>', 
+                       unsafe_allow_html=True)
+    with col3:
+        if 'vote_average' in recommendations_df.columns:
+            avg_rating = recommendations_df['vote_average'].mean()
+            st.markdown(f'<div class="metric-card"><h3>{avg_rating:.1f}</h3><p>Avg TMDB Rating</p></div>', 
+                       unsafe_allow_html=True)
+    
+    # Display recommendations
+    for idx, row in recommendations_df.head(10).iterrows():
+        with st.container():
+            st.markdown(f"""
+            <div class="recommendation-card">
+                <h4>🎬 {row.get('title', 'Unknown Title')}</h4>
+                <p><strong>Overview:</strong> {row.get('overview', 'No overview available')[:200]}...</p>
+                <div style="display: flex; justify-content: space-between; margin-top: 10px;">
+                    <span><strong>Release:</strong> {row.get('release_date', 'Unknown')}</span>
+                    <span><strong>Rating:</strong> {row.get('vote_average', 'N/A')}/10</span>
+                    <span><strong>Genre:</strong> {str(row.get('genres', 'Unknown'))[:30]}...</span>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+def create_visualizations(recommendations_df, strategy):
+    """Create visualizations for the recommendations"""
+    if recommendations_df.empty:
+        return
+    
+    st.subheader("📊 Recommendation Analytics")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Score distribution
+        if 'predicted_rating' in recommendations_df.columns:
+            fig = px.histogram(recommendations_df, x='predicted_rating', 
+                             title="Distribution of Predicted Ratings",
+                             color_discrete_sequence=['#FF6B6B'])
+            st.plotly_chart(fig, use_container_width=True)
+        elif 'similarity' in recommendations_df.columns:
+            fig = px.histogram(recommendations_df, x='similarity', 
+                             title="Distribution of Similarity Scores",
+                             color_discrete_sequence=['#4ECDC4'])
+            st.plotly_chart(fig, use_container_width=True)
+    
+    with col2:
+        # Release year distribution
+        if 'release_date' in recommendations_df.columns:
+            # Extract year from release_date
+            recommendations_df['release_year'] = pd.to_datetime(
+                recommendations_df['release_date'], errors='coerce'
+            ).dt.year
+            
+            year_counts = recommendations_df['release_year'].value_counts().sort_index()
+            fig = px.bar(x=year_counts.index, y=year_counts.values,
+                        title="Movies by Release Year",
+                        color_discrete_sequence=['#95E1D3'])
+            fig.update_layout(xaxis_title="Year", yaxis_title="Count")
+            st.plotly_chart(fig, use_container_width=True)
+
+# Main App
+def main():
+    st.markdown('<h1 class="main-header">🎬 Movie Recommender System</h1>', 
+               unsafe_allow_html=True)
+    
+    # Sidebar for configuration
+    with st.sidebar:
+        st.header("⚙️ Configuration")
         
-        score_line = []
-        if score_type == 'Predicted Score' and 'hybrid_score' in row:
-            score_line.append(f"**Predicted Score:** `{row['hybrid_score']:.2f}`")
-        elif score_type == 'Similarity Score' and 'similarity' in row:
-            score_line.append(f"**Similarity Score:** `{row['similarity']:.3f}`")
+        # File upload or path input
+        st.subheader("📁 Data Files")
+        upload_option = st.radio("Choose data input method:", 
+                                ["Upload Files", "Use File Paths"])
         
-        if 'vote_average' in row and row['vote_average'] > 0:
-            score_line.append(f"**TMDB Rating:** `{row['vote_average']:.1f}/10`")
-        
-        if 'compound' in row:
-             score_line.append(f"**Sentiment Score:** `{row['compound']:.2f}`")
-        if score_line:
-            st.markdown(" | ".join(score_line))
-
-        details_line = []
-        if 'genres' in row and pd.notna(row['genres']):
-            details_line.append(f"**Genres:** `{row['genres']}`")
-        if 'release_date' in row and pd.notna(row['release_date']):
-            details_line.append(f"**Release Date:** `{row['release_date']}`")
-        if 'runtime' in row and row['runtime'] > 0:
-            details_line.append(f"**Runtime:** `{int(row['runtime'])} min`")
-        if details_line:
-            st.markdown("<br>".join(details_line), unsafe_allow_html=True)
-
-        if 'overview' in row and pd.notna(row['overview']) and row['overview']:
-            with st.expander("Overview"):
-                st.write(row['overview'])
-    st.markdown("---")
-
-# =============================================================================
-# 4. USER INTERFACE (UI)
-# =============================================================================
-st.title("🎬 MoviePulse Recommendation & Insights Engine")
-
-tab1, tab2, tab3, tab4 = st.tabs(["👤 For You", "🎞️ Find Similar", "🚀 Cold Start", "📊 Sentiment & Trends"])
-
-with tab1:
-    st.header("Get Personalized Movie Recommendations")
-    user_id_input = st.text_input("Enter an existing User ID:", placeholder="e.g., 1, 50, 250")
-    if st.button("Get Your Recommendations", type="primary", key="user_rec_button"):
-        if user_id_input:
-            try:
-                user_id = int(user_id_input)
-                with st.spinner(f"Fetching recommendations for User {user_id}..."):
-                    recommendations = recommender.recommend(user_id=user_id, strategy='hybrid', top_k=10)
-                if not recommendations.empty:
-                    st.subheader(f"Top 10 Recommendations for User {user_id}")
-                    for _, row in recommendations.iterrows():
-                        display_movie_details(row, score_type='Predicted Score')
-                else:
-                    st.warning(f"Could not generate recommendations for User {user_id}.")
-            except Exception as e:
-                st.error(f"An error occurred: {e}")
-
-with tab2:
-    st.header("Find Movies Similar to a Title You Like")
-    selected_movie = st.selectbox("Choose a movie:", options=movie_titles, index=None, placeholder="Search for a movie...")
-    if selected_movie:
-        st.markdown("---")
-        st.subheader(f"You Selected: {selected_movie}")
-        try:
-            movie_details = recommender.metadata_df[recommender.metadata_df['title'] == selected_movie].iloc[0]
-            display_movie_details(movie_details, score_type=None)
-        except (IndexError, KeyError):
-            st.error("Could not retrieve details for the selected movie.")
-    if st.button("Find Similar Movies", type="primary", key="content_rec_button"):
-        if selected_movie:
-            try:
-                with st.spinner(f"Finding movies similar to '{selected_movie}'..."):
-                    recommendations = recommender.recommend_content_based(movie_title=selected_movie)
-                if not recommendations.empty:
-                    st.subheader(f"Top 10 Movies Similar to '{selected_movie}'")
-                    for _, row in recommendations.iterrows():
-                        display_movie_details(row, score_type='Similarity Score')
-                else:
-                    st.warning(f"Could not find similar movies for '{selected_movie}'.")
-            except Exception as e:
-                st.error(f"An error occurred: {e}")
+        if upload_option == "Upload Files":
+            ratings_file = st.file_uploader("Upload Ratings CSV", type=['csv'])
+            metadata_file = st.file_uploader("Upload Movies Metadata CSV", type=['csv'])
+            
+            if ratings_file and metadata_file:
+                # Save uploaded files temporarily
+                st.session_state.ratings_file = ratings_file
+                st.session_state.metadata_file = metadata_file
         else:
-            st.info("Please select a movie from the list first.")
-
-with tab3:
-    st.header("Get Recommendations for a New User (Cold Start)")
-    st.info("Simulate a new user by uploading a CSV file of their movie ratings. The file must have two columns: `tmdbId` and `rating`.")
-    uploaded_file = st.file_uploader("Upload your ratings CSV", type=["csv"])
-    if uploaded_file is not None:
-        try:
-            user_df = pd.read_csv(uploaded_file)
-            st.success("✅ File uploaded successfully!")
-            if not {'tmdbId', 'rating'}.issubset(user_df.columns):
-                st.error("❌ Invalid format. CSV must have 'tmdbId' and 'rating' columns.")
-            else:
-                st.write("Your ratings:")
-                st.dataframe(user_df)
-                if st.button("🎯 Get Recommendations for This Profile", type="primary"):
-                    with st.spinner("Creating temporary profile..."):
-                        temp_recommender = copy.deepcopy(recommender)
-                        synthetic_user_id = -99
-                        liked_movie_ids = user_df[user_df['rating'] > 3.5]['tmdbId'].tolist()
-                        if not liked_movie_ids:
-                            st.warning("No movies with a rating > 3.5 found in your file.")
-                        else:
-                            temp_recommender.set_user_profile(user_id=synthetic_user_id, train_item_ids=liked_movie_ids)
-                            result = temp_recommender.recommend(user_id=synthetic_user_id, strategy='hybrid', top_k=10)
-                            if not result.empty:
-                                st.subheader("Top 10 Recommendations Based on Your Uploaded Profile")
-                                for _, row in result.iterrows():
-                                    display_movie_details(row, score_type='Predicted Score')
-                            else:
-                                st.warning("Could not generate recommendations from this profile.")
-        except Exception as e:
-            st.error(f"An error occurred while processing the file: {e}")
-
-
-with tab4:
-    st.header("📊 Audience Sentiment Insights")
+            ratings_path = st.text_input("Ratings CSV Path", "ratings.csv")
+            metadata_path = st.text_input("Metadata CSV Path", "movies_metadata.csv")
+            st.session_state.ratings_file = ratings_path
+            st.session_state.metadata_file = metadata_path
+        
+        # Load system button
+        if st.button("🚀 Initialize System", type="primary"):
+            if load_recommender_system():
+                st.rerun()
+        
+        # System status
+        if st.session_state.data_loaded:
+            st.success("✅ System Ready")
+        else:
+            st.warning("⏳ System Not Loaded")
     
-    required_sentiment_cols = ['compound', 'num_reviews']
-    if all(col in recommender.metadata_df.columns for col in required_sentiment_cols):
-        st.markdown("Explore which movies are most loved or polarizing based on our **Smoothed Sentiment Score**.")
-
-        sentiment_data = recommender.metadata_df[recommender.metadata_df['num_reviews'] > 0].copy()
-
-        col1, col2 = st.columns(2)
-
+    # Main content
+    if not st.session_state.data_loaded:
+        st.info("👆 Please configure and initialize the system using the sidebar.")
+        
+        # Show example of what the app can do
+        st.subheader("🌟 What this app can do:")
+        col1, col2, col3 = st.columns(3)
         with col1:
-            st.subheader("🏆 Top 15 Most-Loved Movies")
-            top_positive = sentiment_data.sort_values('compound', ascending=False).head(15)
-            st.dataframe(top_positive[['title', 'compound', 'num_reviews']],
-                         column_config={
-                             "title": "Movie Title",
-                             "compound": st.column_config.ProgressColumn(
-                                 "Smoothed Sentiment", format="%.3f", min_value=0, max_value=1,
-                             ),
-                             "num_reviews": "Review Count"
-                         }, use_container_width=True)
-
+            st.markdown("""
+            **Content-Based**
+            - Find movies similar to your favorites
+            - Based on genres, cast, plot
+            """)
         with col2:
-            st.subheader("📉 Top 15 Most-Polarizing Movies")
-            top_negative = sentiment_data.sort_values('compound', ascending=True).head(15)
-            st.dataframe(top_negative[['title', 'compound', 'num_reviews']],
-                         column_config={
-                             "title": "Movie Title",
-                             "compound": st.column_config.ProgressColumn(
-                                 "Smoothed Sentiment", format="%.3f", min_value=-1, max_value=0,
-                             ),
-                             "num_reviews": "Review Count"
-                         }, use_container_width=True)
+            st.markdown("""
+            **Collaborative Filtering**
+            - User-based recommendations
+            - Item-based suggestions
+            """)
+        with col3:
+            st.markdown("""
+            **Advanced Methods**
+            - Matrix factorization (SVD)
+            - Hybrid approaches
+            """)
+        
+        return
     
-        st.markdown("---")
-        recommendations = recommender.recommend(user_id=1, strategy='hybrid', top_k=10)
-        recommendations[['title', 'compound', 'hybrid_score']]
-        st.subheader("Smoothed Sentiment vs. TMDB Rating")
-        st.scatter_chart(sentiment_data, x='vote_average', y='compound', color='#ff6347', size='num_reviews')
-        st.caption("This chart shows the relationship between TMDB rating and our calculated sentiment score. Bubble size represents the number of reviews.")
-
+    # Recommendation interface
+    st.subheader("🎯 Get Recommendations")
+    
+    # Strategy selection
+    strategy = st.selectbox(
+        "Choose Recommendation Strategy:",
+        ["hybrid", "content", "user", "item", "svd"],
+        help="Select the type of recommendation algorithm to use"
+    )
+    
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        if strategy == "content":
+            # Movie title input for content-based
+            movie_title = st.text_input("Enter a movie title:", 
+                                       placeholder="e.g., The Matrix")
+            user_id = None
+        else:
+            # User ID input for other strategies
+            user_id = st.number_input("Enter User ID:", min_value=1, value=1)
+            movie_title = None
+    
+    with col2:
+        top_k = st.slider("Number of recommendations:", 5, 20, 10)
+        filter_seen = st.checkbox("Filter already seen movies", value=True)
+    
+    # Advanced options for hybrid
+    if strategy == "hybrid":
+        with st.expander("🔧 Advanced Hybrid Settings"):
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                alpha = st.slider("User-based weight (α):", 0.0, 1.0, 0.8, 0.1)
+            with col2:
+                beta = st.slider("Item-based weight (β):", 0.0, 1.0, 0.2, 0.1)
+            with col3:
+                delta = st.slider("Sentiment weight (δ):", 0.0, 1.0, 0.0, 0.1)
     else:
-        st.warning("Aggregated sentiment data not found!")
-        st.info(
-            "The required columns (e.g., 'compound') are missing. "
-            "Please run the advanced sentiment analysis script:\n\n"
-            "`python analysis/run_advanced_sentiment.py`"
-        )
+        alpha, beta, delta = 0.8, 0.2, 0.0
+    
+    # Get recommendations button
+    if st.button("🎬 Get Recommendations", type="primary"):
+        try:
+            with st.spinner('Generating recommendations...'):
+                if strategy == "content" and movie_title:
+                    recommendations = st.session_state.recommender.recommend(
+                        movie_title=movie_title,
+                        strategy=strategy,
+                        top_k=top_k
+                    )
+                elif user_id and strategy != "content":
+                    recommendations = st.session_state.recommender.recommend(
+                        user_id=user_id,
+                        strategy=strategy,
+                        top_k=top_k,
+                        filter_seen=filter_seen,
+                        alpha=alpha,
+                        beta=beta,
+                        delta=delta
+                    )
+                else:
+                    st.error("Please provide the required input for the selected strategy.")
+                    return
+                
+                st.session_state.recommendations = recommendations
+                st.session_state.current_strategy = strategy
+                
+        except Exception as e:
+            st.error(f"Error generating recommendations: {str(e)}")
+    
+    # Display results
+    if st.session_state.recommendations is not None:
+        recommendations = st.session_state.recommendations
+        current_strategy = st.session_state.get('current_strategy', 'unknown')
+        
+        # Tabs for different views
+        tab1, tab2, tab3 = st.tabs(["📋 Recommendations", "📊 Analytics", "📄 Raw Data"])
+        
+        with tab1:
+            display_recommendations(recommendations, current_strategy)
+        
+        with tab2:
+            create_visualizations(recommendations, current_strategy)
+        
+        with tab3:
+            st.subheader("Raw Recommendation Data")
+            st.dataframe(recommendations, use_container_width=True)
+            
+            # Download button
+            csv = recommendations.to_csv(index=False)
+            st.download_button(
+                label="📥 Download Recommendations CSV",
+                data=csv,
+                file_name=f'recommendations_{current_strategy}_{int(time.time())}.csv',
+                mime='text/csv'
+            )
 
-st.markdown("---")
-st.markdown("Built with ❤️ by the FilmFusion Team.")
+if __name__ == "__main__":
+    main()
