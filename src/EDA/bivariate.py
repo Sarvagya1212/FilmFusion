@@ -22,8 +22,11 @@ class NumericalVsNumericalAnalysis(BivariateAnalysisStrategy):
         if ax is None:
             fig, ax = plt.subplots(figsize=(10, 6))
             created_fig = True
+            
+        hue = kwargs.pop("hue", None)
 
-        sns.scatterplot(x=feature1, y=feature2, data=df, ax=ax, **kwargs)
+
+        sns.scatterplot(x=feature1, y=feature2, data=df, hue=hue, ax=ax, **kwargs)
         ax.set_title(title, fontsize=18)
         ax.set_xlabel(feature1)
         ax.set_ylabel(feature2)

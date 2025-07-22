@@ -27,7 +27,7 @@ def evaluate_all_models(model, ratings_df, strategies=['user', 'item', 'hybrid']
         print(f"\nEvaluating {strategy.upper()}...")
         try:
             # Use default alpha, beta, gamma for the general hybrid evaluation
-            model_params = {'alpha': 0.4, 'beta': 0.3, 'gamma': 0.3} if strategy == 'hybrid' else {}
+            model_params = {'alpha': 0.8, 'beta': 0.2, 'delta':0.0} if strategy == 'hybrid' else {}
 
             metrics = evaluate_holdout(
                 model=model,
@@ -62,7 +62,7 @@ def evaluate_all_models(model, ratings_df, strategies=['user', 'item', 'hybrid']
 
 def tune_hybrid_model(model, ratings_df, k=10, users_to_evaluate=50):
     """
-    Performs a grid search to find the best alpha, beta, and gamma weights for the hybrid model.
+    Performs a grid search to find the best alpha, beta, and   weights for the hybrid model.
     """
     print("\n--- Starting Hybrid Model Tuning (Grid Search) ---")
     
@@ -71,7 +71,8 @@ def tune_hybrid_model(model, ratings_df, k=10, users_to_evaluate=50):
     param_grid = {
         'alpha': [0.6, 0.7, 0.8],
         'beta': [0.1, 0.2],
-        'gamma': [0.1, 0.2, 0.3]
+        'delta': [0.0, 0.1,0.2] 
+        
     }
 
     tuning_results = []
@@ -86,7 +87,7 @@ def tune_hybrid_model(model, ratings_df, k=10, users_to_evaluate=50):
         if sum(model_params.values()) != 1.0:
             continue
 
-        print(f"\nTuning with Alpha={model_params['alpha']}, Beta={model_params['beta']}, Gamma={model_params['gamma']}")
+        print(f"\nTuning with Alpha={model_params['alpha']}, Beta={model_params['beta']}, Delta={model_params['delta']}")
         
         try:
             metrics = evaluate_holdout(
@@ -125,7 +126,7 @@ if __name__ == "__main__":
 
     # Step 2: Define file paths
     ratings_path = r"c:\Users\sarva\MoviePulse\data\processed\ratings_cleans.csv"
-    metadata_path = r"C:\Users\sarva\MoviePulse\data\processed\movie_feature.csv"
+    metadata_path = r"C:\Users\sarva\MoviePulse\data\processed\movies_metadata_enriched.csv"
     tfidf_path = r"c:\Users\sarva\MoviePulse\data\Features\tfidf_matrix.npz"
     tfidf_index_path = r"C:\Users\sarva\MoviePulse\data\Features\tfidf_sample.csv"
 

@@ -1,0 +1,27 @@
+
+scipy==1.10.1
+
+
+pandas==1.5.3
+
+
+scikit-surprise==1.1.3
+
+
+matplotlib==3.7.1
+seaborn==0.12.2
+
+scikit-learn==1.2.2
+
+fastapi==0.95.2
+uvicorn==0.22.0
+
+# Logging / utilities
+loguru==0.7.0
+python-dotenv==1.0.0
+
+# If you're using jupyter or notebooks for testing
+jupyterlab==3.6.3
+
+# Optional: API docs, typing help
+pydantic==1.10.7
