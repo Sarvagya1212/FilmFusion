@@ -196,9 +196,11 @@ def initialize_recommender(enable_svd=True):
         
         return True
         
+    
     except Exception as e:
-        st.error(f"❌ Initialization failed: {str(e)}")
-        return False
+            # Handle exceptions
+        print(f"An error occurred during initialization: {e}")
+        return None
 
 def display_movie_card(movie_row, score_column=None, show_overview=True):
     """Enhanced movie card with real posters from your data"""
@@ -980,4 +982,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
