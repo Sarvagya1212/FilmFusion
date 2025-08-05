@@ -125,38 +125,6 @@ def load_poster_image(poster_url, width=150):
     except:
         return None
 
-    def get_movie_suggestions(self, query, n=10):
-        """
-        A user-facing function that takes a text query, finds the best movie match,
-        and returns hybrid recommendations. This is the function your app will call.
-        """
-        try:
-            # Step 1: Find the closest movie title in the dataset
-            # Assuming you have a helper method to find movies. If it's named differently,
-            # please change `find_movie_by_title` to your method's name.
-            matched_movie = self.find_movie_by_title(query)
-
-            if matched_movie is None:
-                # Return an empty DataFrame if no movie is found
-                print(f"No movie found matching query: {query}")
-                return pd.DataFrame()
-
-            matched_title = matched_movie['title']
-            
-            # Step 2: Get recommendations using your main hybrid logic
-            # This calls your internal get_hybrid_recommendations method.
-            # If your method is named something else, change the name here.
-            recommendations_df = self.get_hybrid_recommendations(matched_title, n=n)
-            
-            return recommendations_df
-
-        except Exception as e:
-            print(f"An error occurred in get_movie_suggestions: {e}")
-            # Return an empty DataFrame in case of any error
-            return pd.DataFrame()
-
-
-
 def initialize_recommender(enable_svd=True):
     """Initialize the recommender system with progress tracking"""
     try:
@@ -166,13 +134,6 @@ def initialize_recommender(enable_svd=True):
         # Define relative paths to the data files
         ratings_path = os.path.join(current_dir, 'data', 'processed', 'ratings_cleans.csv')
         metadata_path = os.path.join(current_dir, 'data', 'processed', 'movies_with_sentiment.csv')
-        
-        
-        
-        
-        
-        
-        
         
         # Check if files exist
         if not os.path.exists(ratings_path):
@@ -1020,4 +981,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
