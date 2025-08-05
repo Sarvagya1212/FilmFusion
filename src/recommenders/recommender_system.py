@@ -171,30 +171,41 @@ class RecommenderSystem:
         
         self.compute_user_similarity()
 
-    def search_movies_fuzzy(self, query, max_results=20):
-        """Enhanced movie search with fuzzy matching"""
-        if not query or len(query.strip()) < 2:
-            return pd.DataFrame()
-        
-        query = query.lower().strip()
-        movies_df = self.metadata_df.copy()
-        
-        # Method 1: Exact substring matching
-        exact_matches = movies_df[
-            movies_df['title'].str.lower().str.contains(query, na=False, regex=False)
-        ]
-        
-        # Method 2: Fuzzy matching
-        fuzzy_matches = pd.DataFrame()
-        if len(exact_matches) < max_results:
-            all_titles = movies_df['title'].str.lower().tolist()
-            fuzzy_titles = get_close_matches(query, all_titles, n=max_results, cutoff=0.3)
-            fuzzy_matches = movies_df[movies_df['title'].str.lower().isin(fuzzy_titles)]
-        
-        # Combine results
-        combined_results = pd.concat([exact_matches, fuzzy_matches]).drop_duplicates(subset=['tmdbId'])
-        
-        return combined_results.head(max_results)
+        def search_movies_fuzzy(self, query, max_results=5):
+            """
+            Finds movies that are an exact or close match to the query.
+            This version is robust against missing titles.
+            """
+            if not query:
+                return pd.DataFrame()
+    
+            query = query.lower().strip()
+            movies_df = self.metadata_df.copy()
+    
+            # --- START OF FIX ---
+            # 1. Drop any rows where the title is missing to avoid errors.
+            movies_df.dropna(subset=['title'], inplace=True)
+            # 2. Ensure all titles are strings before proceeding.
+            movies_df['title'] = movies_df['title'].astype(str)
+            # --- END OF FIX ---
+    
+            # Exact matches (case-insensitive)
+            exact_matches = movies_df[movies_df['title'].str.lower() == query]
+    
+            # Fuzzy matches if we don't have enough exact ones
+            fuzzy_matches = pd.DataFrame()
+            if len(exact_matches) < max_results:
+                # Pass the clean list of titles to get_close_matches
+                all_titles = movies_df['title'].str.lower().tolist()
+                fuzzy_titles = get_close_matches(query, all_titles, n=max_results - len(exact_matches), cutoff=0.6)
+                
+                if fuzzy_titles:
+                    fuzzy_matches = movies_df[movies_df['title'].str.lower().isin(fuzzy_titles)]
+    
+            # Combine results and remove duplicates
+            combined_results = pd.concat([exact_matches, fuzzy_matches]).drop_duplicates(subset=['tmdbId']).head(max_results)
+            
+            return combined_results
 
     def get_movie_suggestions(self, query, limit=5):
         """Get movie title suggestions for autocomplete"""
