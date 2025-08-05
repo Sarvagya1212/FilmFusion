@@ -133,7 +133,15 @@ def initialize_recommender(enable_svd=True):
         
         # Define relative paths to the data files
         ratings_path = os.path.join(current_dir, 'data', 'processed', 'ratings_cleans.csv')
-        metadata_path = os.path.join(current_dir, 'data', 'processed', 'movies_with_sentiment.csv')        
+        metadata_path = os.path.join(current_dir, 'data', 'processed', 'movies_with_sentiment.csv')
+        
+        
+        
+        
+        
+        
+        
+        
         # Check if files exist
         if not os.path.exists(ratings_path):
             st.error(f"❌ Ratings file not found: {ratings_path}")
@@ -196,11 +204,9 @@ def initialize_recommender(enable_svd=True):
         
         return True
         
-    
     except Exception as e:
-            # Handle exceptions
-        print(f"An error occurred during initialization: {e}")
-        return None
+        st.error(f"❌ Initialization failed: {str(e)}")
+        return False
 
 def display_movie_card(movie_row, score_column=None, show_overview=True):
     """Enhanced movie card with real posters from your data"""
@@ -622,8 +628,8 @@ def main():
                     st.plotly_chart(fig_genres, use_container_width=True)
     
     elif app_mode == "🔍 Search Movies":
-        st.header("🔍 Enhanced Movie Search with Real Posters")
-        st.info("🧠 **Smart Search + Real Posters**: Type partial names, see actual movie posters!")
+        st.header("🔍 Enhanced Movie Search")
+        st.info("🧠 **Smart Search : Type partial names!")
         
         # Search interface
         col1, col2 = st.columns([4, 1])
@@ -631,7 +637,7 @@ def main():
             search_query = st.text_input(
                 "🔎 Enter movie title:", 
                 placeholder="e.g., matr, incep, dark knight, aveng...",
-                help="Partial matches work! Movies will show with real posters."
+                help="Partial matches work."
             )
         with col2:
             st.write("")
@@ -982,5 +988,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
