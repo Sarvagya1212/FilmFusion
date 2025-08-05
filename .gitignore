@@ -1,5 +1,98 @@
-__pycache__/ 
-*.pyc 
-.env 
-.ipynb_checkpoints/ 
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*.so
 
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Virtual environments
+env/
+venv/
+ENV/
+*.egg-info/
+
+# Python virtual environment files
+*.egg
+*.eggs/
+dist/
+build/
+
+# IDE/editor configs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs and debug files
+*.log
+*.out
+
+# Data and large files
+data/
+datasets/
+*.csv
+*.tsv
+*.json
+*.xlsx
+*.zip
+*.tar.gz
+*.h5
+*.npy
+*.npz
+*.pkl
+*.joblib
+*.db
+*.sqlite
+*.parquet
+
+# Model checkpoints and weights
+*.pt
+*.pth
+*.ckpt
+checkpoints/
+models/
+runs/  # For TensorBoard runs
+wandb/  # Weights and Biases logs
+
+# Cache and temporary files
+.cache/
+*.tmp
+*.temp
+tmp/
+*.bak
+
+# TensorFlow / Keras specific
+*.pb
+*.pbtxt
+saved_model/
+
+# PyTorch specific
+*.pt
+*.pth
+*.ptl
+*.onnx
+*.torchscript
+
+# Colab output (optional)
+*.ipynb~
+
+# Docker files (optional)
+*.pid
+*.pid.lock
+
+# Environment files (optional)
+.env
+.env.*
+
+# DVC or MLflow files (if using)
+.dvc/
+mlruns/
+
+# Large data & models
+dashboard/cache/
+dashboard/moviepulse.db
+data/processed/movies_with_sentiment.csv
+
+
+*.pkl
