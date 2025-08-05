@@ -4,18 +4,21 @@ from sklearn.metrics.pairwise import cosine_similarity, linear_kernel
 from sklearn.feature_extraction.text import TfidfVectorizer
 from difflib import get_close_matches
 from surprise import Dataset, Reader, SVD
+import time
 
 class RecommenderSystem:
-    def __init__(self, ratings_path, metadata_path, content_cols=None, verbose=True, **kwargs):
+    def __init__(self, ratings_path, metadata_path, content_cols=None, verbose=True, enable_svd=True, **kwargs):
         self.ratings_path = ratings_path
         self.metadata_path = metadata_path
         self.verbose = verbose
+        self.enable_svd = enable_svd
         
         if content_cols is None:
-            self.content_cols = ['overview', 'tagline', 'genres_y', 'cast', 'crew', 'keywords', 'reviews']
+            self.content_cols = ['overview', 'tagline', 'genres', 'cast', 'crew', 'keywords']
         else:
             self.content_cols = content_cols
         
+        # Data storage
         self.ratings_df = None
         self.metadata_df = None
         self.user_item_matrix = None
@@ -23,15 +26,22 @@ class RecommenderSystem:
         self.user_similarity_df = None
         self.item_similarity_df = None
         self.svd_model = None
+        
+        # Content model
         self.content_vectorizer = TfidfVectorizer(stop_words='english', max_features=5000)
         self.content_matrix = None
         self.content_id_map = None
 
     def load_data(self):
         if self.verbose: print("Loading data...")
-        self.ratings_df = pd.read_csv(self.ratings_path)
-        self.metadata_df = pd.read_csv(self.metadata_path)
-        # Clean only the specified content columns
+        
+        self.ratings_df = pd.read_csv(self.ratings_path, low_memory=False)
+        self.metadata_df = pd.read_csv(self.metadata_path, low_memory=False)
+        
+        if self.verbose: 
+            print(f"Loaded {len(self.ratings_df):,} ratings and {len(self.metadata_df):,} movies")
+        
+        # Clean content columns
         for col in self.content_cols:
             if col in self.metadata_df.columns:
                 self.metadata_df[col] = self.metadata_df[col].fillna('')
@@ -40,13 +50,9 @@ class RecommenderSystem:
                 if self.verbose: print(f"Warning: Content column '{col}' not found. Treating as empty.")
 
     def build_content_model(self):
-        """
-        Builds the TF-IDF matrix with robust error handling.
-        """
         if self.verbose: print("Building content model...")
         df = self.metadata_df.copy()
         
-        # Ensure all content columns are strings before joining
         soup_components = []
         for col in self.content_cols:
             if col in df.columns:
@@ -57,15 +63,8 @@ class RecommenderSystem:
 
         df['content_soup'] = pd.concat(soup_components, axis=1).apply(lambda row: ' '.join(row), axis=1)
 
-        # Check if the resulting text corpus is empty before vectorizing
         if df['content_soup'].str.strip().eq('').all():
-            print("\n--- DIAGNOSTIC INFO ---")
-            print("Columns used for content model:", self.content_cols)
-            print("Sample of metadata file head:")
-            print(self.metadata_df.head())
-            print("Sample of created 'content_soup':")
-            print(df['content_soup'].head())
-            raise ValueError("After combining all text features, the resulting documents are all empty. Please check your metadata file and the 'content_cols' provided.")
+            raise ValueError("After combining all text features, the resulting documents are all empty.")
             
         try:
             self.content_matrix = self.content_vectorizer.fit_transform(df['content_soup'])
@@ -73,11 +72,7 @@ class RecommenderSystem:
             if self.verbose: print("Content model built successfully.")
         except ValueError as e:
             if "empty vocabulary" in str(e):
-                print("\n--- TF-IDF VOCABULARY ERROR ---")
-                print("The TfidfVectorizer could not build a vocabulary from the provided text.")
-                print("This usually means the text in your 'content_cols' is either empty, contains only common English 'stop words', or is otherwise not providing meaningful features.")
-                print("Columns used:", self.content_cols)
-                print("Please inspect your metadata file to ensure these columns contain rich, descriptive text.")
+                print("TF-IDF could not build vocabulary from the provided text.")
             raise e
 
     def create_user_item_matrix(self):
@@ -85,23 +80,65 @@ class RecommenderSystem:
         ratings_for_pivot = self.ratings_df.groupby(['userId', 'tmdbId'])['rating'].mean().reset_index()
         self.user_item_matrix = ratings_for_pivot.pivot(index='userId', columns='tmdbId', values='rating').fillna(0)
         self.original_user_item_matrix = self.user_item_matrix.copy()
+        if self.verbose: print(f"User-item matrix shape: {self.user_item_matrix.shape}")
 
     def compute_user_similarity(self):
         if self.verbose: print("Computing user similarity...")
-        self.user_similarity_df = pd.DataFrame(cosine_similarity(self.user_item_matrix), index=self.user_item_matrix.index, columns=self.user_item_matrix.index)
+        self.user_similarity_df = pd.DataFrame(cosine_similarity(self.user_item_matrix), 
+                                             index=self.user_item_matrix.index, 
+                                             columns=self.user_item_matrix.index)
 
     def compute_item_similarity(self):
         if self.verbose: print("Computing item similarity...")
         item_matrix = self.user_item_matrix.T
-        self.item_similarity_df = pd.DataFrame(cosine_similarity(item_matrix), index=item_matrix.index, columns=item_matrix.index)
+        self.item_similarity_df = pd.DataFrame(cosine_similarity(item_matrix), 
+                                             index=item_matrix.index, 
+                                             columns=item_matrix.index)
 
-    def train_svd(self):
-        if self.verbose: print("Training SVD model...")
-        reader = Reader(rating_scale=(self.ratings_df['rating'].min(), self.ratings_df['rating'].max()))
-        data = Dataset.load_from_df(self.ratings_df[['userId', 'tmdbId', 'rating']], reader)
+    def train_svd(self, sample_fraction=0.1, max_ratings=50000):
+        """Train SVD with ultra-fast settings for evaluation"""
+        if self.verbose: print("Training SVD model (ultra-fast for evaluation)...")
+        
+        # Aggressive sampling for evaluation
+        if len(self.ratings_df) > max_ratings:
+            sample_size = min(max_ratings, int(len(self.ratings_df) * sample_fraction))
+            sampled_ratings = self.ratings_df.sample(n=sample_size, random_state=42)
+            if self.verbose: print(f"Using {sample_size:,} out of {len(self.ratings_df):,} ratings")
+        else:
+            sampled_ratings = self.ratings_df
+        
+        # Further reduce dataset by sampling users and items
+        popular_movies = sampled_ratings['tmdbId'].value_counts().head(1000).index
+        active_users = sampled_ratings['userId'].value_counts().head(1000).index
+        
+        sampled_ratings = sampled_ratings[
+            (sampled_ratings['tmdbId'].isin(popular_movies)) &
+            (sampled_ratings['userId'].isin(active_users))
+        ]
+        
+        if len(sampled_ratings) == 0:
+            if self.verbose: print("No ratings left after sampling, skipping SVD")
+            self.svd_model = None
+            return
+        
+        reader = Reader(rating_scale=(sampled_ratings['rating'].min(), sampled_ratings['rating'].max()))
+        data = Dataset.load_from_df(sampled_ratings[['userId', 'tmdbId', 'rating']], reader)
         trainset = data.build_full_trainset()
-        self.svd_model = SVD(n_factors=100, n_epochs=20, lr_all=0.005, reg_all=0.02, random_state=42)
+        
+        # Ultra-minimal parameters for fast evaluation
+        self.svd_model = SVD(
+            n_factors=10,      # Reduced from 30
+            n_epochs=2,        # Reduced from 5  
+            lr_all=0.02,       # Higher learning rate
+            reg_all=0.02,
+            random_state=42
+        )
+        
+        start_time = time.time()
         self.svd_model.fit(trainset)
+        end_time = time.time()
+        
+        if self.verbose: print(f"SVD training completed in {end_time - start_time:.1f} seconds")
 
     def run_all(self):
         self.load_data()
@@ -109,89 +146,177 @@ class RecommenderSystem:
         self.create_user_item_matrix()
         self.compute_user_similarity()
         self.compute_item_similarity()
-        self.train_svd()
+        
+        if self.enable_svd:
+            self.train_svd()
+        else:
+            if self.verbose: print("⏭️ Skipping SVD training for faster initialization")
+            self.svd_model = None
+        
         if self.verbose: print("Recommender system initialized.")
 
     def set_user_profile(self, user_id, train_item_ids):
-        if self.original_user_item_matrix is None: raise ValueError("Original matrix not found.")
+        if self.original_user_item_matrix is None: 
+            raise ValueError("Original matrix not found.")
+        
         self.user_item_matrix = self.original_user_item_matrix.copy()
         new_user_row = pd.Series(0, index=self.user_item_matrix.columns, name=user_id)
         valid_movie_ids = [mid for mid in train_item_ids if mid in new_user_row.index]
         new_user_row.loc[valid_movie_ids] = 5.0
+        
         if user_id in self.user_item_matrix.index:
             self.user_item_matrix.loc[user_id] = new_user_row
         else:
             self.user_item_matrix = pd.concat([self.user_item_matrix, new_user_row.to_frame().T])
+        
         self.compute_user_similarity()
 
-    # --- RECOMMENDATION METHODS ---
-    
+    def search_movies_fuzzy(self, query, max_results=20):
+        """Enhanced movie search with fuzzy matching"""
+        if not query or len(query.strip()) < 2:
+            return pd.DataFrame()
+        
+        query = query.lower().strip()
+        movies_df = self.metadata_df.copy()
+        
+        # Method 1: Exact substring matching
+        exact_matches = movies_df[
+            movies_df['title'].str.lower().str.contains(query, na=False, regex=False)
+        ]
+        
+        # Method 2: Fuzzy matching
+        fuzzy_matches = pd.DataFrame()
+        if len(exact_matches) < max_results:
+            all_titles = movies_df['title'].str.lower().tolist()
+            fuzzy_titles = get_close_matches(query, all_titles, n=max_results, cutoff=0.3)
+            fuzzy_matches = movies_df[movies_df['title'].str.lower().isin(fuzzy_titles)]
+        
+        # Combine results
+        combined_results = pd.concat([exact_matches, fuzzy_matches]).drop_duplicates(subset=['tmdbId'])
+        
+        return combined_results.head(max_results)
+
+    def get_movie_suggestions(self, query, limit=5):
+        """Get movie title suggestions for autocomplete"""
+        if not query or len(query) < 2:
+            return []
+        
+        query_lower = query.lower()
+        suggestions = []
+        
+        # Find titles containing the query
+        for title in self.metadata_df['title'].dropna():
+            if query_lower in title.lower():
+                suggestions.append(title)
+                if len(suggestions) >= limit:
+                    break
+        
+        return suggestions
+
     def recommend_content_based(self, movie_title, top_n=10):
-        if self.content_matrix is None: raise ValueError("Content model not built.")
+        if self.content_matrix is None: 
+            raise ValueError("Content model not built.")
+        
         normalized_title = movie_title.lower().strip()
         title_map = self.metadata_df.set_index('tmdbId')['title'].apply(lambda x: str(x).lower().strip())
         movie_id_series = title_map[title_map == normalized_title]
+        
         if movie_id_series.empty:
-            close_matches = get_close_matches(normalized_title, title_map.values, n=3)
-            raise ValueError(f"Movie '{movie_title}' not found. Closest matches: {close_matches}")
-        movie_id = movie_id_series.index[0]
-        if movie_id not in self.content_id_map: raise ValueError(f"Movie ID {movie_id} not in content index.")
+            # Try fuzzy search
+            search_results = self.search_movies_fuzzy(movie_title, 10)
+            if not search_results.empty:
+                movie_id = search_results.iloc[0]['tmdbId']
+                actual_title = search_results.iloc[0]['title']
+                if self.verbose: print(f"Using '{actual_title}' as closest match for '{movie_title}'")
+            else:
+                close_matches = get_close_matches(normalized_title, title_map.values, n=3)
+                raise ValueError(f"Movie '{movie_title}' not found. Closest matches: {close_matches}")
+        else:
+            movie_id = movie_id_series.index[0]
+        
+        if movie_id not in self.content_id_map: 
+            raise ValueError(f"Movie ID {movie_id} not in content index.")
+        
         movie_idx = self.content_id_map[movie_id]
         cosine_sims = linear_kernel(self.content_matrix[movie_idx], self.content_matrix).flatten()
-        sim_scores = pd.Series(cosine_sims, index=self.content_id_map.index).drop(movie_id)
+        sim_scores = pd.Series(cosine_sims, index=self.content_id_map.index)
+        
+        # Remove the input movie itself
+        sim_scores = sim_scores.drop(movie_id, errors='ignore')
         top_sims = sim_scores.sort_values(ascending=False).head(top_n)
+        
         result_df = self.metadata_df[self.metadata_df['tmdbId'].isin(top_sims.index)].copy()
         result_df = result_df.merge(top_sims.rename('similarity'), left_on='tmdbId', right_index=True)
         return result_df.sort_values(by='similarity', ascending=False)
-    
+
     def recommend_user_based(self, user_id, top_n=10, filter_seen=True):
-        if self.user_similarity_df is None: raise ValueError("User similarity not computed.")
-        if user_id not in self.user_item_matrix.index: return pd.DataFrame()
+        if self.user_similarity_df is None: 
+            raise ValueError("User similarity not computed.")
+        if user_id not in self.user_item_matrix.index: 
+            return pd.DataFrame()
+        
         similar_users = self.user_similarity_df[user_id].drop(user_id).sort_values(ascending=False)
         if similar_users.empty: return pd.DataFrame()
+        
         sim_matrix = self.user_item_matrix.loc[similar_users.index]
         weighted_scores = np.dot(similar_users.values, sim_matrix.values)
+        
         if similar_users.sum() == 0: return pd.DataFrame()
+        
         norm_scores = weighted_scores / similar_users.sum()
         predicted_ratings = pd.Series(norm_scores, index=self.user_item_matrix.columns)
+        
         if filter_seen:
             already_rated = self.user_item_matrix.loc[user_id]
             predicted_ratings = predicted_ratings[already_rated == 0]
+        
         top_items = predicted_ratings.sort_values(ascending=False).head(top_n).index
         result = self.metadata_df[self.metadata_df['tmdbId'].isin(top_items)].copy()
         result['predicted_rating'] = result['tmdbId'].map(predicted_ratings)
         return result.sort_values(by='predicted_rating', ascending=False)
 
     def recommend_item_based(self, user_id, top_n=10, filter_seen=True):
-        if self.item_similarity_df is None: raise ValueError("Item similarity not computed.")
-        if user_id not in self.user_item_matrix.index: return pd.DataFrame()
+        if self.item_similarity_df is None: 
+            raise ValueError("Item similarity not computed.")
+        if user_id not in self.user_item_matrix.index: 
+            return pd.DataFrame()
+        
         user_ratings = self.user_item_matrix.loc[user_id]
         rated_items = user_ratings[user_ratings > 0].index
         if rated_items.empty: return pd.DataFrame()
+        
         sim_scores = self.item_similarity_df.loc[:, rated_items]
         weighted_ratings = np.dot(sim_scores.values, user_ratings[rated_items].values)
         sim_sums = sim_scores.sum(axis=1).replace(0, 1e-9)
         predicted_ratings = pd.Series(weighted_ratings / sim_sums, index=sim_scores.index)
+        
         if filter_seen:
             predicted_ratings = predicted_ratings.drop(index=rated_items, errors='ignore')
+        
         top_items = predicted_ratings.sort_values(ascending=False).head(top_n).index
         result = self.metadata_df[self.metadata_df['tmdbId'].isin(top_items)].copy()
         result['predicted_rating'] = result['tmdbId'].map(predicted_ratings)
         return result.sort_values(by='predicted_rating', ascending=False)
 
     def recommend_svd_based(self, user_id, top_n=10, filter_seen=True):
-        if self.svd_model is None: raise ValueError("SVD model not trained.")
+        if self.svd_model is None: 
+            raise ValueError("SVD model not trained.")
+        
         all_movie_ids = self.metadata_df['tmdbId'].unique()
+        
         if filter_seen:
             rated_movie_ids = self.ratings_df[self.ratings_df['userId'] == user_id]['tmdbId'].unique()
             unseen_movie_ids = [mid for mid in all_movie_ids if mid not in rated_movie_ids]
         else:
             unseen_movie_ids = all_movie_ids
+        
         predictions = [self.svd_model.predict(uid=user_id, iid=movie_id) for movie_id in unseen_movie_ids]
         predictions.sort(key=lambda x: x.est, reverse=True)
         top_preds = predictions[:top_n]
+        
         top_movie_ids = [pred.iid for pred in top_preds]
         top_ratings = {pred.iid: pred.est for pred in top_preds}
+        
         result_df = self.metadata_df[self.metadata_df['tmdbId'].isin(top_movie_ids)].copy()
         result_df['predicted_rating'] = result_df['tmdbId'].map(top_ratings)
         return result_df.sort_values('predicted_rating', ascending=False)
@@ -237,14 +362,14 @@ class RecommenderSystem:
         result['hybrid_score'] = result['tmdbId'].map(dict(top_items))
         return result.sort_values(by='hybrid_score', ascending=False)
 
-    # --- MAIN DISPATCHER ---
-    
     def recommend(self, user_id=None, movie_title=None, top_k=10, strategy='hybrid', filter_seen=True, **kwargs):
         if strategy == 'content':
-            if not movie_title: raise ValueError("A 'movie_title' must be provided for the 'content' strategy.")
+            if not movie_title: 
+                raise ValueError("A 'movie_title' must be provided for the 'content' strategy.")
             return self.recommend_content_based(movie_title=movie_title, top_n=top_k)
         
-        if not user_id: raise ValueError("A 'user_id' must be provided for user-based, item-based, svd, or hybrid strategies.")
+        if not user_id: 
+            raise ValueError("A 'user_id' must be provided for user-based, item-based, svd, or hybrid strategies.")
         
         if strategy == 'user':
             return self.recommend_user_based(user_id=user_id, top_n=top_k, filter_seen=filter_seen, **kwargs)
