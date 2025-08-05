@@ -3,9 +3,14 @@ numpy
 streamlit
 scikit-learn
 matplotlib
-seaborn 
+seaborn
+plotly.express
 plotly
+plotly.graph_objects
 statsmodels
 scipy
 requests
-
+Pillow
+difflib
+sys
+os
