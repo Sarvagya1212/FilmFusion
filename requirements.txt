@@ -1,16 +1,11 @@
+# requirements.txt
 pandas
 numpy
 streamlit
 scikit-learn
+scikit-surprise
 matplotlib
 seaborn
-plotly.express
 plotly
-plotly.graph_objects
-statsmodels
-scipy
 requests
 Pillow
-difflib
-sys
-os
