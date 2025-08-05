@@ -1,6 +1,6 @@
 # requirements.txt
 pandas
-numpy
+numpy<2.0
 streamlit
 scikit-learn
 scikit-surprise
