@@ -128,10 +128,12 @@ def load_poster_image(poster_url, width=150):
 def initialize_recommender(enable_svd=True):
     """Initialize the recommender system with progress tracking"""
     try:
-        # File paths
-        ratings_path = r'C:\Users\sarva\MoviePulse\data\processed\ratings_cleans.csv'
-        metadata_path = r'C:\Users\sarva\MoviePulse\data\processed\movies_with_sentiment.csv'
+        # Get the absolute path of the current script
+        current_dir = os.path.dirname(os.path.abspath(__file__))
         
+        # Define relative paths to the data files
+        ratings_path = os.path.join(current_dir, 'data', 'processed', 'ratings_cleans.csv')
+        metadata_path = os.path.join(current_dir, 'data', 'processed', 'movies_with_sentiment.csv')        
         # Check if files exist
         if not os.path.exists(ratings_path):
             st.error(f"❌ Ratings file not found: {ratings_path}")
@@ -978,3 +980,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
