@@ -110,43 +110,11 @@ def initialize_recommender():
                     # Skip users that cause errors in similarity calculation
                     continue
         
-        recommender._precompute_popular_movies()
-        recommender._precompute_genre_statistics()
-        recommender._precompute_user_clusters()
         return recommender
         
     except Exception as e:
         st.error(f"Error initializing recommender: {str(e)}")
         return None
-
-
-# Update your app.py with lazy loading
-def create_lazy_tabs():
-    """Create tabs with lazy loading"""
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        "🎯 Recommendations", 
-        "🔍 Similar Movies", 
-        "📊 Analytics",
-        "🤖 RL Dashboard",
-        "📈 Data Explorer"
-    ])
-    
-    # Only load active tab content
-    return tab1, tab2, tab3, tab4, tab5
-
-# In your main app, use session state to track loaded content
-if 'loaded_tabs' not in st.session_state:
-    st.session_state.loaded_tabs = set()
-
-# Load tab content only when accessed
-def load_tab_content(tab_name, content_function):
-    if tab_name not in st.session_state.loaded_tabs:
-        with st.spinner(f"Loading {tab_name}..."):
-            content_function()
-            st.session_state.loaded_tabs.add(tab_name)
-    else:
-        content_function()
-
 
 # Enhanced UI Helper Functions
 def display_movie_card(movie, score_col=None, rank=None):
