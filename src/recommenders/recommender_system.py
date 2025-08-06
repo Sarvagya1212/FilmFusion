@@ -984,44 +984,7 @@ class RecommenderSystem:
         except (ValueError, TypeError):
             return default
 
-    def _precompute_popular_movies(self):
-        """Pre-compute popular movies for different categories"""
-        self._popular_cache = {
-            'overall': self.metadata_df.nlargest(50, 'vote_average'),
-            'recent': self.metadata_df[self.metadata_df['release_date'] >= '2020-01-01'].nlargest(30, 'popularity'),
-            'by_genre': {}
-        }
-        
-        # Cache popular movies by genre
-        all_genres = set()
-        for genres_str in self.metadata_df['genres'].dropna():
-            try:
-                genres = self._parse_genres(genres_str)
-                all_genres.update(genres)
-            except:
-                continue
-        
-        for genre in list(all_genres)[:10]:  # Top 10 genres only
-            genre_movies = self.metadata_df[
-                self.metadata_df['genres'].str.contains(genre, na=False)
-            ].nlargest(20, 'vote_average')
-            self._popular_cache['by_genre'][genre] = genre_movies
 
-    def _precompute_genre_statistics(self):
-        """Pre-compute genre distribution and statistics"""
-        all_genres = []
-        for genres_str in self.metadata_df['genres'].dropna():
-            try:
-                genres = self._parse_genres(genres_str)
-                all_genres.extend(genres)
-            except:
-                continue
-        
-        self._genre_stats = {
-            'counts': pd.Series(all_genres).value_counts(),
-            'avg_ratings': {},
-            'popularity': {}
-        }
 
     def _parse_genres(self, genres_str: str) -> List[str]:
         """Parse genres from string representation."""
